@@ -1,0 +1,14 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Ecovacs Map Data",
+        "description": "Expose room geometry from the configured Ecovacs integration for compatible dashboard cards."
+      }
+    },
+    "abort": {
+      "already_configured": "Ecovacs Map Data is already configured."
+    }
+  }
+}
+

@@ -1,0 +1,14 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Ecovacs-kaartgegevens",
+        "description": "Maak de kamergeometrie van de bestaande Ecovacs-integratie beschikbaar voor compatibele dashboardkaarten."
+      }
+    },
+    "abort": {
+      "already_configured": "Ecovacs Map Data is al geconfigureerd."
+    }
+  }
+}
+
