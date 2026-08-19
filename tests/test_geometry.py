@@ -1,9 +1,10 @@
 """Tests for Ecovacs coordinate parsing."""
 
-from enum import Enum, auto
 import importlib.util
-from pathlib import Path
+import sys
 import unittest
+from enum import Enum, auto
+from pathlib import Path
 
 MODULE_PATH = (
     Path(__file__).parents[1]
@@ -14,6 +15,7 @@ MODULE_PATH = (
 SPEC = importlib.util.spec_from_file_location("ecovacs_map_geometry", MODULE_PATH)
 assert SPEC and SPEC.loader
 geometry = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = geometry
 SPEC.loader.exec_module(geometry)
 
 
