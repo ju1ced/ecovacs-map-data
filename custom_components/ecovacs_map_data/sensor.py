@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from typing import Any
 
-from deebot_client.events import CachedMapInfoEvent, RoomsEvent
+from deebot_client.events import CachedMapInfoEvent, MapTraceEvent, RoomsEvent
 from deebot_client.events.map import PositionsEvent
+from deebot_client.rs.util import decompress_base64_data
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
@@ -15,7 +17,16 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import ECOVACS_DOMAIN
-from .geometry import parse_coordinates, rotation_degrees
+from .geometry import (
+    TraceAccumulator,
+    decode_trace_chunk,
+    normalize_position_type,
+    parse_coordinates,
+    rotation_degrees,
+    trace_points_to_svg_path,
+)
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -47,6 +58,7 @@ class EcovacsMapGeometrySensor(SensorEntity):
         self._rooms: list[dict[str, Any]] = []
         self._maps: list[dict[str, Any]] = []
         self._positions: list[dict[str, Any]] = []
+        self._trace = TraceAccumulator()
         device_info = device.device_info
         self._attr_unique_id = f"{device_info['did']}_map_geometry"
         self._attr_device_info = DeviceInfo(
@@ -62,14 +74,21 @@ class EcovacsMapGeometrySensor(SensorEntity):
     def extra_state_attributes(self) -> Mapping[str, Any]:
         """Return geometry in a frontend-friendly schema."""
         active_map = next((item for item in self._maps if item["active"]), None)
+        trace_points = self._trace.points
         return {
-            "schema_version": 1,
+            "schema_version": 2,
             "rooms": self._rooms,
             "maps": self._maps,
             "active_map_id": active_map["id"] if active_map else None,
             "active_map_name": active_map["name"] if active_map else None,
             "rotation": active_map["rotation"] if active_map else 0,
             "positions": self._positions,
+            "trace_path": trace_points_to_svg_path(trace_points),
+            "trace_point_count": len(trace_points),
+            "trace_total_points": self._trace.total,
+            "trace_chunk_count": self._trace.chunk_count,
+            "trace_complete": self._trace.complete,
+            "trace_transform": "scale(0.2 -0.2)",
         }
 
     async def async_added_to_hass(self) -> None:
@@ -100,21 +119,44 @@ class EcovacsMapGeometrySensor(SensorEntity):
             self.async_write_ha_state()
 
         async def on_positions(event: PositionsEvent) -> None:
-            self._positions = [
-                {
-                    "type": getattr(position.type, "name", str(position.type)).lower(),
-                    "x": position.x,
-                    "y": position.y,
-                    "angle": position.a,
-                }
-                for position in event.positions
-            ]
+            positions: list[dict[str, Any]] = []
+            for position in event.positions:
+                if (position_type := normalize_position_type(position.type)) is None:
+                    _LOGGER.debug(
+                        "Ignoring unknown map position type: %s", position.type
+                    )
+                    continue
+                positions.append(
+                    {
+                        "type": position_type,
+                        "x": position.x,
+                        "y": position.y,
+                        "angle": position.a,
+                    }
+                )
+            self._positions = positions
+            self.async_write_ha_state()
+
+        async def on_trace(event: MapTraceEvent) -> None:
+            try:
+                points = decode_trace_chunk(event.data, decompress_base64_data)
+                self._trace.update(event.start, event.total, points)
+            except (TypeError, ValueError) as err:
+                _LOGGER.warning(
+                    "Unable to decode Ecovacs trace chunk at %s/%s: %s",
+                    event.start,
+                    event.total,
+                    err,
+                )
+                return
             self.async_write_ha_state()
 
         events = self._device.events
         self.async_on_remove(events.subscribe(RoomsEvent, on_rooms))
         self.async_on_remove(events.subscribe(CachedMapInfoEvent, on_maps))
         self.async_on_remove(events.subscribe(PositionsEvent, on_positions))
+        self.async_on_remove(events.subscribe(MapTraceEvent, on_trace))
         events.request_refresh(CachedMapInfoEvent)
         events.request_refresh(RoomsEvent)
         events.request_refresh(PositionsEvent)
+        events.request_refresh(MapTraceEvent)
