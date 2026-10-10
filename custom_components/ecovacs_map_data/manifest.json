@@ -1,13 +1,13 @@
 {
   "domain": "ecovacs_map_data",
   "name": "Ecovacs Map Data",
+  "after_dependencies": ["ecovacs"],
   "codeowners": ["@ju1ced"],
   "config_flow": true,
   "documentation": "https://github.com/ju1ced/ecovacs-map-data",
   "integration_type": "service",
   "iot_class": "cloud_push",
   "requirements": [],
-  "version": "0.2.0",
-  "after_dependencies": ["ecovacs"]
+  "version": "0.3.0"
 }
 
