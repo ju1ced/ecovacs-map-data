@@ -17,11 +17,26 @@ sensor. It does not make additional cloud calls and does not control the vacuum.
 4. Select **Ecovacs Map Data** and confirm.
 
 One `sensor.*_map_geometry` entity is added to every compatible Ecovacs vacuum.
-Robot Vacuum Dashboard discovers this entity automatically.
+The entity appears on the existing Ecovacs vacuum device; it does not create a
+device of its own. Robot Vacuum Dashboard discovers this entity automatically.
+
+Version 0.3.0 moves sensors that Home Assistant 2026.9 had placed on a separate
+"Ecovacs Map Data" device back to the vacuum device. The entity ID stays the
+same.
+
+## History and reloads
+
+The large attributes `rooms`, `maps`, `positions`, `trace_path` and
+`trace_transform` are not written to recorder history. The current state
+always contains them. The room count and the trace metadata remain recorded.
+
+When the Ecovacs integration reloads, this integration reloads automatically
+and subscribes to the new device objects. If the Ecovacs integration is not
+loaded yet, Home Assistant retries the setup later.
 
 ## Published schema
 
-Version 0.2.0 publishes schema version 2. All version 1 fields remain available:
+Versions 0.2.0 and later publish schema version 2. All version 1 fields remain available:
 
 - `rooms`, `maps`, `active_map_id`, `active_map_name` and `rotation`;
 - normalized `positions`, using only `deebot` and `charger` types;
@@ -41,7 +56,7 @@ this release. The original schema fields themselves remain unchanged.
 
 ## Requirements
 
-- Home Assistant 2026.8 or newer.
+- Home Assistant 2026.9 or newer.
 - The official Ecovacs integration must already be configured.
 - A modern `deebot-client` device with map and room support.
 - Trace data depends on the device exposing `MapTraceEvent`; unsupported models

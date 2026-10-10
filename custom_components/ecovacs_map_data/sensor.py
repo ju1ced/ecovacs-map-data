@@ -13,7 +13,7 @@ from deebot_client.rs.util import decompress_base64_data
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import ECOVACS_DOMAIN
@@ -35,12 +35,24 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Create geometry sensors for modern Ecovacs devices with map support."""
+    device_registry = dr.async_get(hass)
     entities: list[EcovacsMapGeometrySensor] = []
-    for ecovacs_entry in hass.config_entries.async_entries(ECOVACS_DOMAIN):
+    for ecovacs_entry in hass.config_entries.async_loaded_entries(ECOVACS_DOMAIN):
         controller = getattr(ecovacs_entry, "runtime_data", None)
         for device in getattr(controller, "devices", []):
-            if getattr(device.capabilities, "map", None) is not None:
-                entities.append(EcovacsMapGeometrySensor(device))
+            capabilities = getattr(device, "capabilities", None)
+            if getattr(capabilities, "map", None) is None:
+                continue
+            did = device.device_info["did"]
+            device_entry = device_registry.async_get_device_by_identifier(
+                (ECOVACS_DOMAIN, did), ecovacs_entry.entry_id
+            )
+            if device_entry is None:
+                _LOGGER.debug("Skipping Ecovacs device %s without a device entry", did)
+                continue
+            entity = EcovacsMapGeometrySensor(device)
+            entity.device_entry = device_entry
+            entities.append(entity)
     async_add_entities(entities)
 
 
@@ -48,9 +60,12 @@ class EcovacsMapGeometrySensor(SensorEntity):
     """Publish room polygons, map rotation and live positions."""
 
     _attr_has_entity_name = True
-    _attr_name = "Map geometry"
+    _attr_translation_key = "map_geometry"
     _attr_icon = "mdi:vector-polygon"
     _attr_should_poll = False
+    _unrecorded_attributes = frozenset(
+        {"rooms", "maps", "positions", "trace_path", "trace_transform"}
+    )
 
     def __init__(self, device: Any) -> None:
         """Initialize the geometry sensor."""
@@ -59,11 +74,7 @@ class EcovacsMapGeometrySensor(SensorEntity):
         self._maps: list[dict[str, Any]] = []
         self._positions: list[dict[str, Any]] = []
         self._trace = TraceAccumulator()
-        device_info = device.device_info
-        self._attr_unique_id = f"{device_info['did']}_map_geometry"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(ECOVACS_DOMAIN, device_info["did"])},
-        )
+        self._attr_unique_id = f"{device.device_info['did']}_map_geometry"
 
     @property
     def native_value(self) -> int:

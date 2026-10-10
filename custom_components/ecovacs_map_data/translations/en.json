@@ -9,6 +9,13 @@
     "abort": {
       "already_configured": "Ecovacs Map Data is already configured."
     }
+  },
+  "entity": {
+    "sensor": {
+      "map_geometry": {
+        "name": "Map geometry"
+      }
+    }
   }
 }
 
